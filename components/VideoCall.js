@@ -444,7 +444,7 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
     }
   }, [propUser]);
 
-  // --- AUTO-LOGIN/AUTO-CALL FROM QUERY PARAMS ---
+  // --- AUTO-LOGIN/AUTO-CALL FROM QUERY PARAMS (HEADLESS MODE) ---
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
@@ -452,17 +452,15 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
     const token = params.get('token');
     const contact = params.get('contact');
     const contactName = params.get('contactName');
-    const callType = params.get('callType'); // 'video' or 'audio'
+    const callType = params.get('callType');
     // If all required params are present, run in headless mode
     if (user && token && contact && callType) {
       console.log('🤖 Running in headless mode - no UI, just call service');
       setIsHeadless(true);
-      // Set user in localStorage for persistence
       localStorage.setItem('wasaaCallUser', user);
       localStorage.setItem('wasaaCallToken', token);
       setCurrentUser(user);
       setShowSetup(true);
-      // Create/find contact
       let found = contacts.find(c => c.id === contact || c.name === contact);
       if (!found && contact && contactName) {
         found = { id: contact, name: contactName };
@@ -483,6 +481,18 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
     }
   }, [contacts]);
 
+  // Listen for contacts sync from parent (main app)
+  useEffect(() => {
+    function handleContactsMessage(event) {
+      if (event.data && event.data.type === 'SYNC_CONTACTS' && Array.isArray(event.data.contacts)) {
+        setContacts(event.data.contacts);
+        addDebugLog('Contacts synced from main app via postMessage.');
+      }
+    }
+    window.addEventListener('message', handleContactsMessage);
+    return () => window.removeEventListener('message', handleContactsMessage);
+  }, []);
+
   // Replace USERS usage with contacts
   // Helper to get user object by id or name
   const getUserById = (id) => contacts.find(c => c.id === id);
@@ -500,11 +510,10 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
         <div className={styles.container}>
           <h1>🎥 WASAA Video Call System</h1>
           <p style={{ color: '#666', marginBottom: '20px' }}>Enhanced test environment with auto-notifications</p>
-
+          {/* Hide manual contact selection UI if selectedTarget is set by auto-call */}
           {!showSetup && (
             <UserSelection onUserSelect={handleUserSelect} />
           )}
-
           {showSetup && (
             <>
               <div className={styles.userInfo}>
@@ -515,7 +524,6 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
                   {userStatus}
                 </p>
               </div>
-
               <div className={styles.tabs}>
                 <button 
                   className={`${styles.tab} ${activeTab === 'one-on-one' ? styles.tabActive : ''}`}
@@ -530,37 +538,41 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
                   👥 Group Calls
                 </button>
               </div>
-
+              {/* Only show contact selection if not auto-calling */}
               <div className={`${styles.tabContent} ${activeTab === 'one-on-one' ? styles.tabContentActive : ''}`}>
                 <div>
                   <h3>📱 Make a Direct Call</h3>
                   <p>Select a contact to call:</p>
-                  <select 
-                    className={styles.select} 
-                    value={selectedTarget}
-                    onChange={(e) => setSelectedTarget(e.target.value)}
-                  >
-                    <option value="">Select a contact...</option>
-                    {contacts.filter(c => c.name !== currentUser).map(contact => (
-                      <option key={contact.id} value={contact.id}>{contact.name}</option>
-                    ))}
-                  </select>
-                  <div className={styles.controlButtons}>
-                    <button 
-                      className={`${styles.button} ${styles.buttonGreen}`}
-                      onClick={() => handleStartCall('video')}
-                      disabled={!selectedTarget}
-                    >
-                      📹 Start Video Call
-                    </button>
-                    <button 
-                      className={`${styles.button} ${styles.buttonBlue}`}
-                      onClick={() => handleStartCall('audio')}
-                      disabled={!selectedTarget}
-                    >
-                      🎤 Start Audio Call
-                    </button>
-                  </div>
+                  {selectedTarget ? null : (
+                    <>
+                      <select 
+                        className={styles.select} 
+                        value={selectedTarget}
+                        onChange={(e) => setSelectedTarget(e.target.value)}
+                      >
+                        <option value="">Select a contact...</option>
+                        {contacts.filter(c => c.name !== currentUser).map(contact => (
+                          <option key={contact.id} value={contact.id}>{contact.name}</option>
+                        ))}
+                      </select>
+                      <div className={styles.controlButtons}>
+                        <button 
+                          className={`${styles.button} ${styles.buttonGreen}`}
+                          onClick={() => handleStartCall('video')}
+                          disabled={!selectedTarget}
+                        >
+                          📹 Start Video Call
+                        </button>
+                        <button 
+                          className={`${styles.button} ${styles.buttonBlue}`}
+                          onClick={() => handleStartCall('audio')}
+                          disabled={!selectedTarget}
+                        >
+                          🎤 Start Audio Call
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -590,20 +602,6 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
             </>
           )}
 
-          {showCallArea && (
-            <CallArea
-              localStream={localStream}
-              remoteStream={remoteStream}
-              audioEnabled={audioEnabled}
-              videoEnabled={videoEnabled}
-              acceptCallVisible={acceptCallVisible}
-              onAcceptCall={handleAcceptCall}
-              onEndCall={handleEndCall}
-              onToggleAudio={handleToggleAudio}
-              onToggleVideo={handleToggleVideo}
-            />
-          )}
-
           <p className={error.includes('✅') ? styles.success : styles.error}>{error}</p>
 
           <div className={styles.debugLog}>
@@ -628,7 +626,7 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
           </div>
         </div>
       )}
-      {/* Call area always available (works in both modes) */}
+      {/* Call area works in both modes */}
       {showCallArea && (
         <CallArea
           localStream={localStream}
