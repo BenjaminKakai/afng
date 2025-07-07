@@ -1,0 +1,275 @@
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  font-family: Arial, sans-serif;
+  color: #333;
+}
+
+.video {
+  width: 320px;
+  height: auto;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  margin: 10px;
+  background-color: #000;
+}
+
+.groupVideo {
+  width: 200px;
+  height: 150px;
+  object-fit: cover;
+}
+
+.error {
+  color: #d32f2f;
+  font-weight: bold;
+  margin: 10px 0;
+}
+
+.success {
+  color: #2e7d32;
+  font-weight: bold;
+}
+
+.button {
+  padding: 10px 20px;
+  margin: 5px;
+  cursor: pointer;
+  border: none;
+  border-radius: 4px;
+  color: white;
+  font-size: 14px;
+  transition: background-color 0.3s;
+}
+
+.button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.buttonGreen { 
+  background-color: #4caf50; 
+}
+
+.buttonBlue { 
+  background-color: #2196f3; 
+}
+
+.buttonRed { 
+  background-color: #f44336; 
+}
+
+.videosContainer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.videoWrapper {
+  margin: 10px;
+  text-align: center;
+}
+
+.videoWrapper h4 {
+  margin: 5px 0;
+  font-size: 14px;
+}
+
+.statusIndicator {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 5px;
+  background-color: #ccc;
+}
+
+.statusActive {
+  background-color: #4caf50;
+}
+
+.notification {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #ff9800, #f57c00);
+  color: white;
+  padding: 15px 20px;
+  border-radius: 12px;
+  z-index: 1000;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  min-width: 300px;
+  text-align: center;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from { 
+    transform: translate(-50%, -100%); 
+    opacity: 0; 
+  }
+  to { 
+    transform: translate(-50%, 0); 
+    opacity: 1; 
+  }
+}
+
+.notification h3 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+}
+
+.notification p {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+}
+
+.userSelection {
+  margin: 20px 0;
+  padding: 15px;
+  background-color: #f0f0f0;
+  border-radius: 8px;
+}
+
+.devSelector {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin: 20px 0;
+}
+
+.tabs {
+  display: flex;
+  margin-bottom: 20px;
+  border-bottom: 2px solid #ddd;
+}
+
+.tab {
+  padding: 10px 20px;
+  cursor: pointer;
+  background-color: #f0f0f0;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-right: 5px;
+}
+
+.tabActive {
+  background-color: #4caf50;
+  color: white;
+  border-bottom: 3px solid #388e3c;
+}
+
+.tabContent {
+  display: none;
+}
+
+.tabContentActive {
+  display: block;
+}
+
+.formGroup {
+  margin: 15px 0;
+  text-align: left;
+}
+
+.formGroup label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.formGroup input,
+.formGroup select,
+.formGroup textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.formGroup textarea {
+  height: 60px;
+  resize: vertical;
+}
+
+.checkboxGroup {
+  display: flex;
+  align-items: center;
+  margin: 10px 0;
+}
+
+.checkboxGroup input {
+  width: auto;
+  margin-right: 8px;
+}
+
+.select {
+  width: 100%;
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+}
+
+.userInfo {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.callInfo {
+  margin: 15px 0;
+  padding: 10px;
+  background-color: #f8f8f8;
+  border-radius: 8px;
+  border: 1px dashed #ddd;
+}
+
+.roomControls {
+  margin: 15px 0;
+  padding: 15px;
+  background-color: #e3f2fd;
+  border-radius: 8px;
+  border: 1px solid #90caf9;
+}
+
+.currentRoomInfo {
+  background: #e3f2fd;
+  padding: 15px;
+  border-radius: 8px;
+  margin: 10px 0;
+}
+
+.controlButtons {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.debugLog {
+  text-align: left;
+  height: 150px;
+  overflow-y: auto;
+  background-color: #f8f8f8;
+  border: 1px solid #ddd;
+  padding: 10px;
+  margin-top: 20px;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.debugButtons {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
