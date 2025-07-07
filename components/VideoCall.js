@@ -37,6 +37,7 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [acceptCallVisible, setAcceptCallVisible] = useState(false);
   const [selectedTarget, setSelectedTarget] = useState('');
+  const [isHeadless, setIsHeadless] = useState(false);
 
   // Refs for managers
   const socketManagerRef = useRef(null);
@@ -450,29 +451,35 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
     const user = params.get('user');
     const token = params.get('token');
     const contact = params.get('contact');
+    const contactName = params.get('contactName');
     const callType = params.get('callType'); // 'video' or 'audio'
-    // If all required params are present, auto-login and auto-call
+    // If all required params are present, run in headless mode
     if (user && token && contact && callType) {
+      console.log('🤖 Running in headless mode - no UI, just call service');
+      setIsHeadless(true);
       // Set user in localStorage for persistence
       localStorage.setItem('wasaaCallUser', user);
       localStorage.setItem('wasaaCallToken', token);
       setCurrentUser(user);
       setShowSetup(true);
-      // Wait for contacts to load, then auto-select and call
-      const tryAutoCall = () => {
-        // Find the contact in the loaded contacts list
-        const found = contacts.find(c => c.id === contact || c.name === contact);
-        if (found) {
-          setSelectedTarget(found.id);
-          setTimeout(() => {
-            handleStartCall(callType);
-          }, 300); // Give UI a moment to update
-        } else {
-          // Retry after a short delay if contacts not loaded yet
-          setTimeout(tryAutoCall, 200);
-        }
-      };
-      tryAutoCall();
+      // Create/find contact
+      let found = contacts.find(c => c.id === contact || c.name === contact);
+      if (!found && contact && contactName) {
+        found = { id: contact, name: contactName };
+        setContacts(prev => {
+          if (!prev.some(c => c.id === contact)) {
+            return [...prev, found];
+          }
+          return prev;
+        });
+      }
+      if (found || contact) {
+        setSelectedTarget(contact);
+        setTimeout(() => {
+          console.log(`🎯 Headless call service starting ${callType} call to ${contactName || contact}`);
+          handleStartCall(callType);
+        }, 300);
+      }
     }
   }, [contacts]);
 
@@ -488,137 +495,153 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
         onAccept={handleAcceptCall}
         onDismiss={hideNotification}
       />
+      {/* Only show UI if NOT in headless mode */}
+      {!isHeadless && (
+        <div className={styles.container}>
+          <h1>🎥 WASAA Video Call System</h1>
+          <p style={{ color: '#666', marginBottom: '20px' }}>Enhanced test environment with auto-notifications</p>
 
-      <div className={styles.container}>
-        <h1>🎥 WASAA Video Call System</h1>
-        <p style={{ color: '#666', marginBottom: '20px' }}>Enhanced test environment with auto-notifications</p>
+          {!showSetup && (
+            <UserSelection onUserSelect={handleUserSelect} />
+          )}
 
-        {!showSetup && (
-          <UserSelection onUserSelect={handleUserSelect} />
-        )}
+          {showSetup && (
+            <>
+              <div className={styles.userInfo}>
+                <p><strong>🏷️ Logged in as:</strong> {currentUser}</p>
+                <p><strong>🆔 User ID:</strong> {getUserByName(currentUser)?.id}</p>
+                <p><strong>📊 Status:</strong> 
+                  <span className={`${styles.statusIndicator} ${userStatus === 'available' ? styles.statusActive : ''}`}></span>
+                  {userStatus}
+                </p>
+              </div>
 
-        {showSetup && (
-          <>
-            <div className={styles.userInfo}>
-              <p><strong>🏷️ Logged in as:</strong> {currentUser}</p>
-              <p><strong>🆔 User ID:</strong> {getUserByName(currentUser)?.id}</p>
-              <p><strong>📊 Status:</strong> 
-                <span className={`${styles.statusIndicator} ${userStatus === 'available' ? styles.statusActive : ''}`}></span>
-                {userStatus}
-              </p>
-            </div>
-
-            <div className={styles.tabs}>
-              <button 
-                className={`${styles.tab} ${activeTab === 'one-on-one' ? styles.tabActive : ''}`}
-                onClick={() => setActiveTab('one-on-one')}
-              >
-                📞 1:1 Calls
-              </button>
-              <button 
-                className={`${styles.tab} ${activeTab === 'group-calls' ? styles.tabActive : ''}`}
-                onClick={() => setActiveTab('group-calls')}
-              >
-                👥 Group Calls
-              </button>
-            </div>
-
-            <div className={`${styles.tabContent} ${activeTab === 'one-on-one' ? styles.tabContentActive : ''}`}>
-              <div>
-                <h3>📱 Make a Direct Call</h3>
-                <p>Select a contact to call:</p>
-                <select 
-                  className={styles.select} 
-                  value={selectedTarget}
-                  onChange={(e) => setSelectedTarget(e.target.value)}
+              <div className={styles.tabs}>
+                <button 
+                  className={`${styles.tab} ${activeTab === 'one-on-one' ? styles.tabActive : ''}`}
+                  onClick={() => setActiveTab('one-on-one')}
                 >
-                  <option value="">Select a contact...</option>
-                  {contacts.filter(c => c.name !== currentUser).map(contact => (
-                    <option key={contact.id} value={contact.id}>{contact.name}</option>
-                  ))}
-                </select>
-                <div className={styles.controlButtons}>
-                  <button 
-                    className={`${styles.button} ${styles.buttonGreen}`}
-                    onClick={() => handleStartCall('video')}
-                    disabled={!selectedTarget}
+                  📞 1:1 Calls
+                </button>
+                <button 
+                  className={`${styles.tab} ${activeTab === 'group-calls' ? styles.tabActive : ''}`}
+                  onClick={() => setActiveTab('group-calls')}
+                >
+                  👥 Group Calls
+                </button>
+              </div>
+
+              <div className={`${styles.tabContent} ${activeTab === 'one-on-one' ? styles.tabContentActive : ''}`}>
+                <div>
+                  <h3>📱 Make a Direct Call</h3>
+                  <p>Select a contact to call:</p>
+                  <select 
+                    className={styles.select} 
+                    value={selectedTarget}
+                    onChange={(e) => setSelectedTarget(e.target.value)}
                   >
-                    📹 Start Video Call
-                  </button>
-                  <button 
-                    className={`${styles.button} ${styles.buttonBlue}`}
-                    onClick={() => handleStartCall('audio')}
-                    disabled={!selectedTarget}
-                  >
-                    🎤 Start Audio Call
-                  </button>
+                    <option value="">Select a contact...</option>
+                    {contacts.filter(c => c.name !== currentUser).map(contact => (
+                      <option key={contact.id} value={contact.id}>{contact.name}</option>
+                    ))}
+                  </select>
+                  <div className={styles.controlButtons}>
+                    <button 
+                      className={`${styles.button} ${styles.buttonGreen}`}
+                      onClick={() => handleStartCall('video')}
+                      disabled={!selectedTarget}
+                    >
+                      📹 Start Video Call
+                    </button>
+                    <button 
+                      className={`${styles.button} ${styles.buttonBlue}`}
+                      onClick={() => handleStartCall('audio')}
+                      disabled={!selectedTarget}
+                    >
+                      🎤 Start Audio Call
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className={`${styles.tabContent} ${activeTab === 'group-calls' ? styles.tabContentActive : ''}`}>
-              <GroupCallControls 
-                currentUser={currentUser}
-                contacts={contacts}
-                onCreateRoom={handleCreateGroupRoom}
-              />
-              
-              {currentRoomInfo.visible && (
-                <div className={styles.currentRoomInfo}>
-                  <h4>🏠 Current Room</h4>
-                  <p><strong>Room:</strong> {currentRoomInfo.name}</p>
-                  <p><strong>Room ID:</strong> {currentRoomInfo.id}</p>
-                  <p><strong>Participants:</strong> {currentRoomInfo.participants}</p>
+              <div className={`${styles.tabContent} ${activeTab === 'group-calls' ? styles.tabContentActive : ''}`}>
+                <GroupCallControls 
+                  currentUser={currentUser}
+                  contacts={contacts}
+                  onCreateRoom={handleCreateGroupRoom}
+                />
+                
+                {currentRoomInfo.visible && (
+                  <div className={styles.currentRoomInfo}>
+                    <h4>🏠 Current Room</h4>
+                    <p><strong>Room:</strong> {currentRoomInfo.name}</p>
+                    <p><strong>Room ID:</strong> {currentRoomInfo.id}</p>
+                    <p><strong>Participants:</strong> {currentRoomInfo.participants}</p>
+                  </div>
+                )}
+              </div>
+
+              {callInfo.visible && (
+                <div className={styles.callInfo}>
+                  <p><strong>📞 Call ID:</strong> {callInfo.callId}</p>
+                  <p><strong>📊 Status:</strong> {callInfo.status}</p>
                 </div>
               )}
-            </div>
+            </>
+          )}
 
-            {callInfo.visible && (
-              <div className={styles.callInfo}>
-                <p><strong>📞 Call ID:</strong> {callInfo.callId}</p>
-                <p><strong>📊 Status:</strong> {callInfo.status}</p>
-              </div>
-            )}
-          </>
-        )}
+          {showCallArea && (
+            <CallArea
+              localStream={localStream}
+              remoteStream={remoteStream}
+              audioEnabled={audioEnabled}
+              videoEnabled={videoEnabled}
+              acceptCallVisible={acceptCallVisible}
+              onAcceptCall={handleAcceptCall}
+              onEndCall={handleEndCall}
+              onToggleAudio={handleToggleAudio}
+              onToggleVideo={handleToggleVideo}
+            />
+          )}
 
-        {showCallArea && (
-          <CallArea
-            localStream={localStream}
-            remoteStream={remoteStream}
-            audioEnabled={audioEnabled}
-            videoEnabled={videoEnabled}
-            acceptCallVisible={acceptCallVisible}
-            onAcceptCall={handleAcceptCall}
-            onEndCall={handleEndCall}
-            onToggleAudio={handleToggleAudio}
-            onToggleVideo={handleToggleVideo}
-          />
-        )}
+          <p className={error.includes('✅') ? styles.success : styles.error}>{error}</p>
 
-        <p className={error.includes('✅') ? styles.success : styles.error}>{error}</p>
+          <div className={styles.debugLog}>
+            {debugLogs.map((log, index) => (
+              <div key={index}>{log}</div>
+            ))}
+          </div>
 
-        <div className={styles.debugLog}>
-          {debugLogs.map((log, index) => (
-            <div key={index}>{log}</div>
-          ))}
+          <div className={styles.debugButtons}>
+            <button className={`${styles.button} ${styles.buttonBlue}`} onClick={checkSocketStatus}>
+              🔍 Check Status
+            </button>
+            <button className={`${styles.button} ${styles.buttonBlue}`} onClick={clearDebugLog}>
+              🗑️ Clear Log
+            </button>
+            <button className={`${styles.button} ${styles.buttonGreen}`} onClick={testNotifications}>
+              🧪 Test Notifications
+            </button>
+            <button className={`${styles.button} ${styles.buttonRed}`} onClick={simulateRoomInvite}>
+              📞 Simulate Invite
+            </button>
+          </div>
         </div>
-
-        <div className={styles.debugButtons}>
-          <button className={`${styles.button} ${styles.buttonBlue}`} onClick={checkSocketStatus}>
-            🔍 Check Status
-          </button>
-          <button className={`${styles.button} ${styles.buttonBlue}`} onClick={clearDebugLog}>
-            🗑️ Clear Log
-          </button>
-          <button className={`${styles.button} ${styles.buttonGreen}`} onClick={testNotifications}>
-            🧪 Test Notifications
-          </button>
-          <button className={`${styles.button} ${styles.buttonRed}`} onClick={simulateRoomInvite}>
-            📞 Simulate Invite
-          </button>
-        </div>
-      </div>
+      )}
+      {/* Call area always available (works in both modes) */}
+      {showCallArea && (
+        <CallArea
+          localStream={localStream}
+          remoteStream={remoteStream}
+          audioEnabled={audioEnabled}
+          videoEnabled={videoEnabled}
+          acceptCallVisible={acceptCallVisible}
+          onAcceptCall={handleAcceptCall}
+          onEndCall={handleEndCall}
+          onToggleAudio={handleToggleAudio}
+          onToggleVideo={handleToggleVideo}
+        />
+      )}
     </div>
   );
 }
