@@ -48,8 +48,19 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
   useEffect(() => {
     if (!currentUser) return;
 
+    // In headless mode, use token from localStorage and user from URL
+    const userToken = isHeadless
+      ? localStorage.getItem('wasaaCallToken')
+      : (getUserByName(currentUser)?.token || localStorage.getItem('wasaaCallToken'));
+    const userObj = {
+      id: isHeadless
+        ? new URLSearchParams(window.location.search).get('user')
+        : getUserByName(currentUser)?.id,
+      token: userToken
+    };
+
     socketManagerRef.current = new SocketManager();
-    socketManagerRef.current.init(currentUser);
+    socketManagerRef.current.init(userObj);
     webrtcManagerRef.current = new WebRTCManager(socketManagerRef.current);
 
     setupEventHandlers();
@@ -58,8 +69,8 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
     // Instead, listen for 'room-invite' event from WebRTCManager/SocketManager.
     // The handler only handles UI/modal logic.
     const handleRoomInviteNotification = (data) => {
-      console.log('[GroupCall] Received room-invite:', data, 'Current user:', USERS[currentUser]?.id);
-      if (data.targetId === USERS[currentUser].id) {
+      console.log('[GroupCall] Received room-invite:', data, 'Current user:', userObj.id);
+      if (data.targetId === userObj.id) {
         pendingRoomInviteRef.current = data;
         showNotificationDialog(
           '📞 Group Call Started',
@@ -79,7 +90,7 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
         webrtcManagerRef.current.cleanupCall();
       }
     };
-  }, [currentUser]);
+  }, [currentUser, isHeadless]);
 
   const setupEventHandlers = () => {
     const socket = socketManagerRef.current;
@@ -453,6 +464,16 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
     const contact = params.get('contact');
     const contactName = params.get('contactName');
     const callType = params.get('callType');
+    
+    // ADD THESE DEBUG LOGS
+    console.log('🔍 URL Params Debug:');
+    console.log('- Full URL:', window.location.href);
+    console.log('- user:', user);
+    console.log('- token:', token);
+    console.log('- contact:', contact);
+    console.log('- contactName:', contactName);
+    console.log('- callType:', callType);
+    
     // If all required params are present, run in headless mode
     if (user && token && contact && callType) {
       console.log('🤖 Running in headless mode - no UI, just call service');
@@ -478,6 +499,8 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
           handleStartCall(callType);
         }, 300);
       }
+    } else {
+      console.log('❌ Missing params - showing full UI');
     }
   }, [contacts]);
 
