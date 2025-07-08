@@ -1,4 +1,4 @@
-import { USERS, API_BASE_URL } from './socket.js';
+import { API_BASE_URL } from './socket.js'; // REMOVED USERS import!
 
 export class WebRTCManager {
   constructor(socketManager) {
@@ -16,6 +16,11 @@ export class WebRTCManager {
     this.callAcceptTimeout = 30000;
     
     this.setupSocketHandlers();
+  }
+
+  // Helper function to get current USERS (always fresh!)
+  getCurrentUsers() {
+    return window.USERS || {};
   }
 
   setupSocketHandlers() {
@@ -83,12 +88,13 @@ export class WebRTCManager {
 
       this.peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
+          const USERS = this.getCurrentUsers(); // Get fresh USERS
           console.log(`Sending ICE candidate: ${event.candidate.candidate}`);
           this.socketManager.socketEmit('ice-candidate', {
             callId: this.currentCallId,
             targetId: USERS[this.otherUser]?.id,
             candidate: event.candidate,
-            senderId: USERS[this.socketManager.currentUser].id
+            senderId: USERS[this.socketManager.currentUser]?.id
           });
         } else {
           console.log('ICE gathering completed');
@@ -128,6 +134,8 @@ export class WebRTCManager {
   async handleCallOffer(data) {
     const { callId, callerId, offer, callType = 'video' } = Array.isArray(data) ? data[0] : data;
     console.log(`Call offer received: ${callId} from ${callerId}`);
+    
+    const USERS = this.getCurrentUsers(); // Get fresh USERS
     
     this.currentCallId = callId;
     this.otherUser = Object.keys(USERS).find(user => USERS[user].id === callerId);
@@ -183,35 +191,66 @@ export class WebRTCManager {
   }
 
   async startCall(targetUser, callType = 'video') {
-    if (!targetUser) {
-      this.socketManager.emit('error', 'Please select a user to call');
-      return;
-    }
-    if (this.currentCallId) {
-      this.socketManager.emit('error', 'A call is already in progress');
-      return;
-    }
+    console.log('🔍 WebRTC startCall debug:');
+    console.log('- targetUser:', targetUser);
+    console.log('- this.socketManager.currentUser:', this.socketManager.currentUser);
+
+    const USERS = this.getCurrentUsers(); // Get fresh USERS
+    console.log('- USERS object:', USERS);
+    console.log('- USERS[this.socketManager.currentUser]:', USERS[this.socketManager.currentUser]);
 
     try {
-      console.log(`Starting ${callType} call to ${targetUser}`);
+      if (!targetUser) {
+        this.socketManager.emit('error', 'Please select a user to call');
+        return;
+      }
+
+      // Check target user exists
+      if (!USERS[targetUser] || !USERS[targetUser].id) {
+        console.error('❌ USERS[targetUser] or .id is undefined:', targetUser, USERS[targetUser]);
+        this.socketManager.emit('error', `Target user not found or missing id: ${targetUser}`);
+        return;
+      }
+
+      console.log('🔍 Step 1: Creating fetch body...');
+      const fetchBody = {
+        targetUserId: USERS[targetUser].id,
+        callType,
+        settings: { video: callType === 'video', audio: true }
+      };
+      console.log('🔍 Fetch body created:', fetchBody);
+
+      // Check current user exists
+      if (!USERS[this.socketManager.currentUser] || !USERS[this.socketManager.currentUser].token) {
+        console.error('❌ USERS[this.socketManager.currentUser] or .token is undefined:', this.socketManager.currentUser, USERS[this.socketManager.currentUser]);
+        this.socketManager.emit('error', `Current user not found or missing token: ${this.socketManager.currentUser}`);
+        return;
+      }
+
+      console.log('🔍 Step 2: Creating authorization header...');
+      const authToken = USERS[this.socketManager.currentUser].token;
+      console.log('🔍 Auth token (first 50 chars):', authToken?.substring(0, 50) + '...');
+
+      console.log('🔍 Step 3: Making fetch call...');
       const response = await fetch(`${API_BASE_URL}/calls`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${USERS[this.socketManager.currentUser].token}`,
+          'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          targetUserId: USERS[targetUser].id,
-          callType,
-          settings: { video: callType === 'video', audio: true }
-        })
+        body: JSON.stringify(fetchBody)
       });
 
+      console.log('🔍 Step 4: Fetch completed, status:', response.status);
+
+      const responseData = await response.json();
+      console.log('🔍 Step 5: Response parsed:', responseData);
+
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+        throw new Error(`HTTP ${response.status}: ${JSON.stringify(responseData)}`);
       }
 
-      const data = await response.json();
+      const data = responseData;
       if (!data.success) throw new Error(data.message || 'Failed to start call');
 
       this.currentCallId = data.data.callId;
@@ -226,22 +265,24 @@ export class WebRTCManager {
       if (!(await this.initMedia(callType === 'video'))) {
         throw new Error('Failed to initialize media');
       }
-
+      
       await this.initWebRTC();
       const offer = await this.peerConnection.createOffer();
       await this.peerConnection.setLocalDescription(offer);
 
       this.socketManager.socketEmit('call-offer', {
         callId: this.currentCallId,
-        targetId: USERS[targetUser].id,
+        targetId: USERS[targetUser]?.id,
         offer,
-        callerId: USERS[this.socketManager.currentUser].id,
+        callerId: USERS[this.socketManager.currentUser]?.id,
         callType
       });
 
       this.socketManager.emit('success', `${callType} calling ${targetUser}...`);
     } catch (error) {
-      console.error(`Error starting call: ${error.message}`);
+      console.log('🚨 ERROR CAUGHT IN startCall:');
+      console.log('- Error message:', error.message);
+      console.log('- Error stack:', error.stack);
       this.socketManager.emit('error', `Error: ${error.message}`);
       this.cleanupCall();
     }
@@ -254,6 +295,7 @@ export class WebRTCManager {
     }
 
     try {
+      const USERS = this.getCurrentUsers(); // Get fresh USERS
       console.log(`Accepting call ${this.currentCallId}`);
       
       const answer = this.peerConnection.localDescription;
@@ -265,12 +307,12 @@ export class WebRTCManager {
 
       this.socketManager.socketEmit('call-answer', {
         callId: this.currentCallId,
-        targetId: USERS[this.otherUser].id,
+        targetId: USERS[this.otherUser]?.id,
         answer: { 
           type: this.peerConnection.localDescription.type, 
           sdp: this.peerConnection.localDescription.sdp 
         },
-        receiverId: USERS[this.socketManager.currentUser].id
+        receiverId: USERS[this.socketManager.currentUser]?.id
       });
 
       console.log('Answer sent via socket');
@@ -294,6 +336,7 @@ export class WebRTCManager {
     }
 
     try {
+      const USERS = this.getCurrentUsers(); // Get fresh USERS
       console.log(`Ending call ${this.currentCallId}`);
       this.socketManager.socketEmit('call-end', { 
         callId: this.currentCallId, 
@@ -351,8 +394,9 @@ export class WebRTCManager {
 
   // Simplified group call handlers
   handleRoomInvite(data) {
+    const USERS = this.getCurrentUsers(); // Get fresh USERS
     console.log(`Room invite notification received:`, data);
-    if (data.targetId === USERS[this.socketManager.currentUser].id) {
+    if (data.targetId === USERS[this.socketManager.currentUser]?.id) {
       this.currentRoomId = data.roomId;
       this.isGroupCall = true;
       this.socketManager.emit('room-invite', data);
@@ -360,9 +404,10 @@ export class WebRTCManager {
   }
 
   handleBroadcastRoomInvite(data) {
+    const USERS = this.getCurrentUsers(); // Get fresh USERS
     console.log(`Broadcast room invite received:`, data);
-    if (data.targetId === USERS[this.socketManager.currentUser].id && 
-        data.hostId !== USERS[this.socketManager.currentUser].id) {
+    if (data.targetId === USERS[this.socketManager.currentUser]?.id && 
+        data.hostId !== USERS[this.socketManager.currentUser]?.id) {
       this.currentRoomId = data.roomId;
       this.isGroupCall = true;
       this.socketManager.emit('room-invite', data);

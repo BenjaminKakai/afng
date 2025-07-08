@@ -48,20 +48,49 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
   useEffect(() => {
     if (!currentUser) return;
 
-    // In headless mode, use token from localStorage and user from URL
-    const userToken = isHeadless
-      ? localStorage.getItem('wasaaCallToken')
-      : (getUserByName(currentUser)?.token || localStorage.getItem('wasaaCallToken'));
-    const userObj = {
-      id: isHeadless
-        ? new URLSearchParams(window.location.search).get('user')
-        : getUserByName(currentUser)?.id,
-      token: userToken
-    };
-
     socketManagerRef.current = new SocketManager();
-    socketManagerRef.current.init(userObj);
     webrtcManagerRef.current = new WebRTCManager(socketManagerRef.current);
+
+    // In headless mode, use params from URL, otherwise use contacts or localStorage
+    let userObj;
+    if (isHeadless) {
+      // Headless mode: use URL params and localStorage
+      const params = new URLSearchParams(window.location.search);
+      userObj = {
+        id: params.get('user'),
+        name: currentUser,
+        token: localStorage.getItem('wasaaCallToken')
+      };
+      // Create temporary global USERS object for WebRTC compatibility
+      if (typeof window !== 'undefined') {
+        window.USERS = window.USERS || {};
+        window.USERS[currentUser] = userObj;
+        window.USERS[userObj.id] = userObj;
+        // Add ALL contacts to USERS object (they don't need real tokens for outgoing calls)
+        contacts.forEach(contact => {
+          window.USERS[contact.id] = {
+            id: contact.id,
+            name: contact.name,
+            token: null // Target contacts don't need tokens for outgoing calls
+          };
+          window.USERS[contact.name] = window.USERS[contact.id];
+        });
+        console.log('🔧 Created global USERS object:', window.USERS);
+      }
+      console.log('🔧 Headless mode user object:', userObj);
+    } else {
+      // Normal mode: use contacts or fallback to localStorage
+      const userFromContacts = getUserByName(currentUser);
+      userObj = userFromContacts || {
+        id: localStorage.getItem('wasaaCallUserId'),
+        name: currentUser,
+        token: localStorage.getItem('wasaaCallToken')
+      };
+      console.log('🔧 Normal mode user object:', userObj);
+    }
+
+    // Initialize with the proper user object
+    socketManagerRef.current.init(userObj);
 
     setupEventHandlers();
 
@@ -189,7 +218,8 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
   };
 
   const handleUserPresenceChanged = (data) => {
-    const userData = Array.isArray(data) ? data.find(d => d.userId === USERS[currentUser].id) : data;
+    const userObj = getCurrentUserObj();
+    const userData = Array.isArray(data) ? data.find(d => d.userId === userObj.id) : data;
     if (userData) {
       setUserStatus(userData.status || 'offline');
     }
@@ -208,15 +238,9 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
     }
   };
 
-  const handleStartCall = async (callType = 'video') => {
-    if (webrtcManagerRef.current && selectedTarget) {
-      await webrtcManagerRef.current.startCall(selectedTarget, callType);
-    }
-  };
-
   const handleAcceptCall = async () => {
     hideNotification();
-    
+    const userObj = getCurrentUserObj();
     // Check if it's a room invite
     if (pendingRoomInviteRef.current) {
       const inviteData = pendingRoomInviteRef.current;
@@ -226,44 +250,41 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
         id: inviteData.roomId,
         participants: 2
       });
-
       // Initialize group call media
       if (webrtcManagerRef.current) {
         await webrtcManagerRef.current.initMedia(true);
         setLocalStream(webrtcManagerRef.current.getLocalStream());
       }
-
       // Emit join events
       socketManagerRef.current.socketEmit('join-room', {
         roomId: inviteData.roomId,
-        userId: USERS[currentUser].id,
-        userName: currentUser
+        userId: userObj.id,
+        userName: userObj.name
       });
       socketManagerRef.current.socketEmit('webrtc-ready', {
         roomId: inviteData.roomId,
-        userId: USERS[currentUser].id,
-        userName: currentUser
+        userId: userObj.id,
+        userName: userObj.name
       });
       socketManagerRef.current.socketEmit('room-join-accepted', {
         roomId: inviteData.roomId,
         roomName: inviteData.roomName,
-        userId: USERS[currentUser].id,
-        userName: currentUser,
+        userId: userObj.id,
+        userName: userObj.name,
         hostId: inviteData.hostId
       });
-
       // Fetch current participants from backend and connect to each
       try {
         const res = await fetch(`/api/rooms/${inviteData.roomId}/participants`, {
           headers: {
-            'Authorization': `Bearer ${USERS[currentUser].token}`
+            'Authorization': `Bearer ${userObj.token}`
           }
         });
         if (res.ok) {
           const data = await res.json();
           const participants = data.data?.participants || data.data || [];
           for (const peer of participants) {
-            if (peer.id !== USERS[currentUser].id) {
+            if (peer.id !== userObj.id) {
               await webrtcManagerRef.current.connectToPeer(peer.id, inviteData.roomId);
             }
           }
@@ -272,13 +293,11 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
       } catch (err) {
         addDebugLog('Failed to fetch participants or connect to peers: ' + err.message);
       }
-
       showSuccess(`Joined ${inviteData.roomName} successfully!`);
       pendingRoomInviteRef.current = null;
       setShowCallArea(true);
       return;
     }
-
     // Handle regular call accept
     if (webrtcManagerRef.current) {
       await webrtcManagerRef.current.acceptCall();
@@ -304,11 +323,12 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
   };
 
   const handleCreateGroupRoom = async (roomData) => {
+    const userObj = getCurrentUserObj();
     // 1. Create the room via backend API
     const createRoomRes = await fetch(`/api/rooms`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${USERS[currentUser].token}`,
+        'Authorization': `Bearer ${userObj.token}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
@@ -326,26 +346,23 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
     }
     const createRoomData = await createRoomRes.json();
     const roomId = createRoomData.data.roomId || createRoomData.data.room.id || createRoomData.data.id;
-
     setCurrentRoomInfo({
       visible: true,
       name: roomData.roomName,
       id: roomId,
       participants: 1
     });
-
     // Initialize group call media
     if (webrtcManagerRef.current) {
       await webrtcManagerRef.current.initMedia(!roomData.audioOnly);
       setLocalStream(webrtcManagerRef.current.getLocalStream());
     }
-
     // 2. Send invites via backend API
     if (roomData.inviteDevs && roomData.inviteDevs.length > 0) {
       const inviteRes = await fetch(`/api/rooms/${roomId}/invite`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${USERS[currentUser].token}`,
+          'Authorization': `Bearer ${userObj.token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ userIds: roomData.inviteDevs })
@@ -359,7 +376,6 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
     } else {
       showSuccess(`Room "${roomData.roomName}" created successfully`);
     }
-
     setShowCallArea(true);
   };
 
@@ -376,15 +392,14 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
   const testNotifications = () => {
     addDebugLog('Testing notification system...');
     showNotificationDialog('Test Notification', 'This is a local test notification', true);
-    
+    const userObj = getCurrentUserObj();
     if (socketManagerRef.current && socketManagerRef.current.socket?.connected) {
       const testData = {
-        fromUser: currentUser,
-        fromUserId: USERS[currentUser].id,
+        fromUser: userObj.name,
+        fromUserId: userObj.id,
         message: 'Socket test notification',
         timestamp: new Date().toISOString()
       };
-      
       socketManagerRef.current.socketEmit('test-broadcast', testData);
       addDebugLog(`Sent test message: ${JSON.stringify(testData)}`);
     } else {
@@ -394,22 +409,20 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
 
   const simulateRoomInvite = () => {
     addDebugLog('Simulating room invite...');
-    
+    const userObj = getCurrentUserObj();
     const mockInvite = {
-      targetId: USERS[currentUser].id,
+      targetId: userObj.id,
       roomId: 'test-room-12345',
       roomName: 'Simulated Test Room',
       hostName: 'Test Host',
       hostId: 'test-host-id',
       type: 'group-call-invite'
     };
-    
     showNotificationDialog(
       '📞 Group Call Started',
       `${mockInvite.hostName} started "${mockInvite.roomName}". Click Accept to join!`,
       true
     );
-    
     pendingRoomInviteRef.current = mockInvite;
     showSuccess('Simulated room invite created!');
   };
@@ -494,10 +507,12 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
       }
       if (found || contact) {
         setSelectedTarget(contact);
-        setTimeout(() => {
+        setTimeout(async () => {
           console.log(`🎯 Headless call service starting ${callType} call to ${contactName || contact}`);
-          handleStartCall(callType);
-        }, 300);
+          if (webrtcManagerRef.current && contact) {
+            await webrtcManagerRef.current.startCall(contact, callType);
+          }
+        }, 500);
       }
     } else {
       console.log('❌ Missing params - showing full UI');
@@ -520,6 +535,24 @@ export default function VideoCall({ currentUser: propUser, contacts: propContact
   // Helper to get user object by id or name
   const getUserById = (id) => contacts.find(c => c.id === id);
   const getUserByName = (name) => contacts.find(c => c.name === name);
+
+  // Helper to get the current user object robustly (works in all modes)
+  const getCurrentUserObj = () => {
+    if (isHeadless) {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        id: params.get('user'),
+        name: currentUser,
+        token: localStorage.getItem('wasaaCallToken')
+      };
+    }
+    const userFromContacts = getUserByName(currentUser);
+    return userFromContacts || {
+      id: localStorage.getItem('wasaaCallUserId'),
+      name: currentUser,
+      token: localStorage.getItem('wasaaCallToken')
+    };
+  };
 
   return (
     <div style={{ fontFamily: 'Arial, sans-serif', margin: '20px', backgroundColor: '#f5f5f5', color: '#333' }}>

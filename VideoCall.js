@@ -30,11 +30,17 @@ export default function VideoCall() {
   const remoteVideoRef = useRef(null);
 
   // Dummy USERS object for demo (replace with real data)
+  // FIXED - Now uses UUID keys that match what WebRTC expects!
   const USERS = {
-    'Dev 1': { id: '5717c314-0ed1-4984-aa0d-4af6c961586e', token: '...' },
-    'Dev 2': { id: '9a105e6f-ca83-4e09-ab83-46dfdfef112e', token: '...' },
-    'Dev 3': { id: 'e8c7507f-2d69-4401-ab07-6a24325fb66b', token: '...' },
-    'Dev 4': { id: '3d12d8b0-8e90-46b8-a8b3-7692dc23c994', token: '...' },
+    '5717c314-0ed1-4984-aa0d-4af6c961586e': { id: '5717c314-0ed1-4984-aa0d-4af6c961586e', name: 'Dev 1', token: '...' },
+    '9a105e6f-ca83-4e09-ab83-46dfdfef112e': { id: '9a105e6f-ca83-4e09-ab83-46dfdfef112e', name: 'Dev 2', token: '...' },
+    'e8c7507f-2d69-4401-ab07-6a24325fb66b': { id: 'e8c7507f-2d69-4401-ab07-6a24325fb66b', name: 'Dev 3', token: '...' },
+    '3d12d8b0-8e90-46b8-a8b3-7692dc23c994': { id: '3d12d8b0-8e90-46b8-a8b3-7692dc23c994', name: 'Dev 4', token: '...' },
+    // Also add the display name mappings for backward compatibility:
+    'Dev 1': { id: '5717c314-0ed1-4984-aa0d-4af6c961586e', name: 'Dev 1', token: '...' },
+    'Dev 2': { id: '9a105e6f-ca83-4e09-ab83-46dfdfef112e', name: 'Dev 2', token: '...' },
+    'Dev 3': { id: 'e8c7507f-2d69-4401-ab07-6a24325fb66b', name: 'Dev 3', token: '...' },
+    'Dev 4': { id: '3d12d8b0-8e90-46b8-a8b3-7692dc23c994', name: 'Dev 4', token: '...' },
   };
 
   // Utility functions (showError, showSuccess, logDebug, etc.)

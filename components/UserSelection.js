@@ -2,30 +2,10 @@ import styles from '../styles/VideoCall.module.css';
 
 export default function UserSelection({ onUserSelect }) {
   const developers = [
-    { 
-      id: 'Dev 1', 
-      name: '🔴 Dev 1', 
-      subtitle: 'Primary Tester', 
-      color: '#ff6b6b' 
-    },
-    { 
-      id: 'Dev 2', 
-      name: '🟢 Dev 2', 
-      subtitle: 'Secondary Tester', 
-      color: '#4ecdc4' 
-    },
-    { 
-      id: 'Dev 3', 
-      name: '🔵 Dev 3', 
-      subtitle: 'Group Call Host', 
-      color: '#45b7d1' 
-    },
-    { 
-      id: 'Dev 4', 
-      name: '🟡 Dev 4', 
-      subtitle: 'Mobile Simulator', 
-      color: '#96ceb4' 
-    }
+    { id: '5717c314-0ed1-4984-aa0d-4af6c961586e', name: '🔴 Dev 1', subtitle: 'Primary Tester', color: '#ff6b6b' },
+    { id: '9a105e6f-ca83-4e09-ab83-46dfdfef112e', name: '🟢 Dev 2', subtitle: 'Secondary Tester', color: '#4ecdc4' },
+    { id: '4d0ee74a-1dc0-4eeb-bee5-e7a46d1cc608', name: '🔵 Dev 3', subtitle: 'Group Call Host', color: '#45b7d1' },
+    { id: 'd019cf14-a715-4d1d-b6b4-16c6d672874b', name: '🟡 Dev 4', subtitle: 'Mobile Simulator', color: '#96ceb4' },
   ];
 
   return (
